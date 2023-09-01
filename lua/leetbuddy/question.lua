@@ -34,6 +34,7 @@ local function question_display(contents, oldqbufnr)
     vim.api.nvim_buf_set_option(Qbufnr, "swapfile", false)
     vim.api.nvim_buf_set_option(Qbufnr, "modifiable", false)
     vim.api.nvim_buf_set_option(Qbufnr, "buftype", "nofile")
+    vim.api.nvim_buf_set_option(Qbufnr, "filetype", "markdown")
     vim.api.nvim_buf_set_option(Qbufnr, "buflisted", false)
     vim.api.nvim_buf_set_keymap(Qbufnr, "n", "<esc>", "<cmd>hide<CR>", { noremap = true })
     vim.api.nvim_buf_set_keymap(Qbufnr, "n", "q", "<cmd>hide<CR>", { noremap = true })
@@ -53,79 +54,61 @@ local function question_display(contents, oldqbufnr)
 end
 
 local function fetch_question(slug)
-  vim.cmd("LBCheckCookies")
+    local question = M.fetch_question_data(slug)
+    if question == vim.NIL then
+        return "You don't have a premium plan"
+    end
+    return question["questionFrontendId"] .. ". " .. question["title"] .. "\n" .. question["content"]
+end
 
-  local variables = {
-    titleSlug = slug,
-  }
+function M.fetch_question_data(slug)
+    vim.cmd("silent !LBCheckCookies")
 
-  local query = [[
-  query questionData($titleSlug: String!) {
-    question(titleSlug: $titleSlug) {
-      questionId
-      questionFrontendId
-      ]] .. (config.domain == "cn" and [[
-         title: translatedTitle
-         content: translatedContent
-      ]] or [[
-         title
-         content
-      ]]) .. [[
-      codeSnippets {
-        lang
-        langSlug
-        code
-      }
+    local variables = {
+        titleSlug = slug,
     }
-  }
-  ]]
 
-  local response = curl.post(
-    config.graphql_endpoint,
-    { headers = headers, body = vim.json.encode({ query = query, variables = variables }) }
-  )
+    local query = [[
+    query questionData($titleSlug: String!) {
+        question(titleSlug: $titleSlug) {
+            questionId
+            questionFrontendId
+            sampleTestCase
+        ]] .. (config.domain == "cn" and [[
+            title: translatedTitle
+            content: translatedContent
+        ]] or [[
+            title
+            content
+        ]]) .. [[
+            codeSnippets {
+                lang
+                langSlug
+                code
+            }
+        }
+    }
+    ]]
 
-  local question = vim.json.decode(response["body"])["data"]["question"]
-  question_id = question["questionId"]
-  local content = question["content"]
-  if question["content"] == vim.NIL then
-    return "You don't have a premium plan"
-  end
-  local entities = {
-    { "amp", "&" },
-    { "apos", "'" },
-    { "#x27", "'" },
-    { "#x2F", "/" },
-    { "#39", "'" },
-    { "#47", "/" },
-    { "lt", "<" },
-    { "gt", ">" },
-    { "nbsp", " " },
-    { "quot", '"' },
-  }
+    local response = curl.post(
+        config.graphql_endpoint,
+        { headers = headers, body = vim.json.encode({ query = query, variables = variables }) }
+    )
 
-  local img_urls = {}
-  content = content:gsub("<img.-src=[\"'](.-)[\"'].->", function(url)
-    table.insert(img_urls, url)
-    return "##IMAGE##"
-  end)
-  content = string.gsub(content, "<[^>]+>", "")
+    local question = vim.json.decode(response["body"])["data"]["question"]
 
-  for _, url in ipairs(img_urls) do
-    content = string.gsub(content, "##IMAGE##", url, 1)
-  end
+    question_id = question["questionId"]
+    if question["content"] == vim.NIL then
+        return vim.NIL
+    end
+    question["content"] = utils.format_content(question["content"])
 
-  for _, entity in ipairs(entities) do
-    content = string.gsub(content, "&" .. entity[1] .. ";", entity[2])
-  end
-  return question["questionFrontendId"] .. ". " .. question["title"] .. "\n" .. content
+    return question
 end
 
 function M.question()
   if utils.is_in_folder(vim.api.nvim_buf_get_name(0), config.directory) then
-    local file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":t")
-
-    local question_slug = utils.get_question_slug(file)
+    local question_slug = utils.get_current_buf_slug_name()
     if previous_question_slug ~= question_slug then
       question_content = utils.split_string_to_table(fetch_question(question_slug))
     end
@@ -137,8 +120,7 @@ end
 
 function M.get_question_id()
   if not question_id then
-    local file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":t")
-    local question_slug = utils.get_question_slug(file)
+    local question_slug = utils.get_current_buf_slug_name()
     local _ = fetch_question(question_slug)
   end
   return question_id

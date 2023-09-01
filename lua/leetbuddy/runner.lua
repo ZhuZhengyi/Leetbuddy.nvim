@@ -22,12 +22,14 @@ local function generate_id(mode)
 
   local code = utils.read_file_contents(vim.fn.expand("%:p"))
 
+  code = utils.get_content_by_range(code, config.code_tmpl_start, config.code_tmpl_end)
+
   local question_slug = utils.get_question_slug(file)
 
-  local endpoint_url = config.website .. "/problems/" .. question_slug .. "/" .. request_mode[mode]["endpoint"] .. "/"
+  local endpoint_url = string.format("%s/problems/%s/%s/", config.website, question_slug, request_mode[mode]["endpoint"])
 
   local extra_headers = {
-    ["Referer"] = config.website .. "/problems/" .. utils.get_question_slug(question_slug) .. "/",
+    ["Referer"] = string.format("%s/problems/%s", config.website, utils.get_question_slug(question_slug))
   }
 
   local new_headers = vim.tbl_deep_extend("force", headers, extra_headers)
@@ -39,8 +41,7 @@ local function generate_id(mode)
   }
 
   if mode == "test" then
-    local code_path = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
-    local input_path = utils.get_input_file_path(code_path)
+    local input_path = utils.get_current_buf_test_case()
     local test_body_extra = {
       data_input = utils.read_file_contents(input_path),
       judge_type = "small",
@@ -91,9 +92,8 @@ local function check_id(id, mode)
       timer:stop()
       local results_buffer = require("leetbuddy.split").get_results_buffer()
       -- utils.P(json_data) -- DEBUGGING
-      local code_path = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
-      local input_path = utils.get_input_file_path(code_path)
-      require("leetbuddy.display").display_results(false, results_buffer, json_data, mode, input_path)
+      local test_case_path = utils.get_current_buf_test_case()
+      require("leetbuddy.display").display_results(false, results_buffer, json_data, mode, test_case_path)
       return
     end
   end

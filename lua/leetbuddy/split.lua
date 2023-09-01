@@ -9,7 +9,6 @@ local results_buffer
 
 function M.split()
   local code_buffer = vim.api.nvim_get_current_buf()
-  local code_path = vim.api.nvim_buf_get_name(code_buffer)
 
   if input_buffer ~= nil then
     return
@@ -27,7 +26,7 @@ function M.split()
   vim.api.nvim_buf_set_option(results_buffer, "filetype", "Results")
 
   vim.api.nvim_buf_call(code_buffer, function()
-    vim.cmd("botright vsplit " .. utils.get_input_file_path(code_path))
+    vim.cmd("botright vsplit " .. utils.get_current_buf_test_case())
   end)
 
   vim.api.nvim_buf_call(input_buffer, function()
@@ -123,9 +122,10 @@ function M.close_split()
   end
 
   if utils.is_in_folder(vim.api.nvim_buf_get_name(0), config.directory) then
-    local code_path = vim.api.nvim_buf_get_name(0)
-    vim.cmd("silent! bd " .. code_path)
-    vim.cmd("silent! bd " .. utils.get_input_file_path(code_path))
+    local buf_name = vim.api.nvim_buf_get_name(0)
+    local id_slug = utils.get_current_buf_id_slug_name()
+    vim.cmd("silent! bd " .. buf_name)
+    vim.cmd("silent! bd " .. utils.get_test_case_path(id_slug))
   end
   input_buffer = nil
   results_buffer = nil

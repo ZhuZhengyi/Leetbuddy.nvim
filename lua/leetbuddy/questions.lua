@@ -9,11 +9,13 @@ local M = {}
 
 M.difficulty = nil
 M.status = nil
+M.skip = 0
 
 local function display_questions(search_query)
   local graphql_endpoint = config.graphql_endpoint
 
   local variables = {
+    skip = M.skip,
     limit = 20,
     filters = {
       difficulty = M.difficulty,
@@ -23,13 +25,14 @@ local function display_questions(search_query)
   }
 
   local query = [[
-    query problemsetQuestionList($limit: Int, $filters: QuestionListFilterInput) {
+    query problemsetQuestionList($limit: Int, $skip: Int, $filters: QuestionListFilterInput) {
   ]] .. (config.domain == "cn" and [[
       problemsetQuestionList(
   ]] or [[
       problemsetQuestionList: questionList(
   ]]) .. [[
         categorySlug: ""
+        skip: $skip
         limit: $limit
         filters: $filters
     ) {
@@ -125,32 +128,52 @@ local function gen_from_questions()
   end
 end
 
+local function pick_a_question(search_query)
+  local graphql_endpoint = config.graphql_endpoint
+
+  local variables = {
+    skip = M.skip,
+    limit = 20,
+    filters = {
+      difficulty = M.difficulty,
+      searchKeywords = search_query,
+      status = M.status,
+    },
+  }
+
+  local query = [[
+    query problemsetRandomFilteredQuestion($categorySlug: String!, $filters: QuestionListFilterInput) {
+          problemsetRandomFilteredQuestion(categorySlug: $categorySlug, filters: $filters)
+        }
+    ]]
+
+  local response =
+    curl.post(graphql_endpoint, { headers = headers, body = vim.json.encode({ query = query, variables = variables }) })
+
+  local data = vim.json.decode(response["body"])["data"]["problemsetRandomFilteredQuestion"]
+  return (data ~= vim.NIL and data["question"] or {})
+
+end
+
 local function select_problem(prompt_bufnr)
   actions.close(prompt_bufnr)
   local problem = action_state.get_selected_entry()
   local question_slug = string.format("%04d-%s", problem["value"]["frontendQuestionId"], problem["value"]["slug"])
 
-  if not utils.find_file_inside_folder(config.directory, question_slug) then
-    vim.api.nvim_command(":silent !mkdir " .. config.directory .. sep .. question_slug)
-  end
-
-  local file = config.directory .. sep .. question_slug .. sep .. question_slug .. "." .. config.language
-  local input = config.directory .. sep .. question_slug .. sep .. "input" .. "." .. "txt"
-
-  local qfound =
-    utils.find_file_inside_folder(config.directory .. sep .. question_slug, question_slug .. "." .. config.language)
+  local code_file_path = utils.get_code_file_path(question_slug, config.language)
+  local test_case_path = utils.get_test_case_path(question_slug)
 
   if split.get_results_buffer() then
     vim.api.nvim_command("LBClose")
   end
 
-  if not qfound then
-    vim.api.nvim_command(":silent !touch " .. file)
-    vim.api.nvim_command(":silent !touch " .. input)
-    vim.api.nvim_command("edit! " .. file)
+  if not utils.file_exists(code_file_path) then
+    vim.api.nvim_command(":silent !touch " .. code_file_path)
+    vim.api.nvim_command(":silent !touch " .. test_case_path)
+    vim.api.nvim_command("edit! " .. code_file_path)
     vim.api.nvim_command("LBReset")
   else
-    vim.api.nvim_command("edit! " .. file)
+    vim.api.nvim_command("edit! " .. code_file_path)
   end
   vim.api.nvim_command("LBSplit")
   vim.api.nvim_command("LBQuestion")
@@ -174,6 +197,7 @@ function M.questions()
       }),
       sorter = conf.generic_sorter(opts),
       attach_mappings = function(_, map)
+        map({ "n", "i" }, "<C-p>", pick_a_question)
         map({ "n", "i" }, "<CR>", select_problem)
         map({ "n", "i" }, "<A-r>", function()
           M.difficulty = nil
@@ -204,10 +228,19 @@ function M.questions()
           M.status = "TRIED"
           M.questions()
         end)
+        map({ "n", "i" }, config.page_prev, function()
+          M.skip = M.skip >= 20 and M.skip - 20 or M.skip
+          M.questions()
+        end)
+        map({ "n", "i" }, config.page_next, function()
+          M.skip = M.skip + 20
+          M.questions()
+        end)
         return true
       end,
     })
     :find()
 end
+
 
 return M

@@ -1,3 +1,6 @@
+local config = require("leetbuddy.config")
+local sep = require("plenary.path").path.sep
+
 M = {}
 
 M.langSlugToFileExt = {
@@ -52,18 +55,35 @@ end
 
 function M.find_file_inside_folder(folderpath, foldername)
   local folder = io.popen("ls " .. folderpath)
-  local files_str = folder:read("*all")
+  if folder ~= vim.NIL then
+      local files_str = folder:read("*all")
 
-  for line in files_str:gmatch("%s*(.-)%s*\n") do
-    if foldername == line then
-      return true
-    end
+      for line in files_str:gmatch("%s*(.-)%s*\n") do
+          if foldername == line then
+              return true
+          end
+      end
   end
   return false
 end
 
 function M.is_in_folder(file, folder)
   return string.sub(file, 1, string.len(folder)) == folder
+end
+
+function M.get_current_buf_test_case()
+    local id_slug = M.get_current_buf_id_slug_name()
+    return M.get_test_case_path(id_slug)
+end
+
+function M.get_current_buf_id_slug_name()
+  local file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":t")
+  return string.gsub(file,  "%.[^.]+$", "")
+end
+
+function M.get_current_buf_slug_name()
+  local file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":t")
+  return M.get_question_slug(file)
 end
 
 function M.get_question_slug(file)
@@ -80,6 +100,33 @@ function M.read_file_contents(path)
   return nil
 end
 
+function M.file_exists(name)
+   local f = io.open(name, "r")
+   return f ~= nil and io.close(f)
+end
+--
+function M.get_content_by_range(content, start_flag, end_flag)
+    local from = nil
+    if start_flag ~= nil then
+        local _from = string.find(content, start_flag)
+        from = _from
+    end
+    if from == nil then
+        return content
+    end
+
+    local to = nil
+    if end_flag ~= nil then
+        local _, _to = string.find(content, end_flag)
+        to = _to
+    end
+    if to == nil then
+        to = -1
+    end
+
+    return string.sub(content, from, to)
+end
+
 function M.get_file_extension(filename)
   local _, _, extension = string.find(filename, "%.([^%.]+)$")
   return extension
@@ -90,12 +137,54 @@ function M.strip_file_extension(file)
   return file:sub(1, lastDotIndex - 1)
 end
 
-function M.get_input_file_path(file_path)
-  local directory_path = file_path:match("(.*/)") or ""
+function M.format_content(content)
+    local entities = {
+        { "amp", "&" },
+        { "apos", "'" },
+        { "#x27", "'" },
+        { "#x2F", "/" },
+        { "#39", "'" },
+        { "#47", "/" },
+        { "lt", "<" },
+        { "gt", ">" },
+        { "nbsp", " " },
+        { "quot", '"' },
+    }
 
-  local input_file_path = directory_path .. "input.txt"
+    local img_urls = {}
+    content = content:gsub("<img.-src=[\"'](.-)[\"'].->", function(url)
+        table.insert(img_urls, url)
+        return "##IMAGE##"
+    end)
+    content = string.gsub(content, "<[^>]+>", "")
 
-  return input_file_path
+    for _, url in ipairs(img_urls) do
+        content = string.gsub(content, "##IMAGE##", url, 1)
+    end
+
+    for _, entity in ipairs(entities) do
+        content = string.gsub(content, "&" .. entity[1] .. ";", entity[2])
+    end
+
+    return content
+end
+
+function M.get_code_file_path(slug, ext)
+  local code_dir_path = string.format("%s%s%s", config.directory, sep, config.code_dir)
+  if not M.file_exists(code_dir_path) then
+    vim.api.nvim_command(string.format(":silent !mkdir %s", code_dir_path))
+  end
+
+  return string.format("%s%s%s.%s", code_dir_path, sep, slug , ext)
+end
+
+function M.get_test_case_path(slug)
+  local test_case_dir_path = string.format("%s%s%s", config.directory, sep, config.test_case_dir)
+  if not M.file_exists(test_case_dir_path) then
+    vim.api.nvim_command(string.format(":silent !mkdir %s", test_case_dir_path))
+  end
+
+  return string.format("%s%s%s.txt", test_case_dir_path , sep, slug)
 end
 
 function M.get_question_number_from_file_name(file_name)
