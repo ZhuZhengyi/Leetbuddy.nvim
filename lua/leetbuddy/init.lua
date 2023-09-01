@@ -11,6 +11,7 @@ local function create_cmds()
   local test = require("leetbuddy.runner").test
   local submit = require("leetbuddy.runner").submit
   local checkcookies = require("leetbuddy.cookies").check_auth
+  local getRandomQuestion = require("leetbuddy.random_question").getRandomQuestion
 
   local opts = {}
 
@@ -22,6 +23,8 @@ local function create_cmds()
   vim.api.nvim_create_user_command("LBSubmit", submit, opts)
   vim.api.nvim_create_user_command("LBClose", close, opts)
   vim.api.nvim_create_user_command("LBCheckCookies", checkcookies, opts)
+  vim.api.nvim_create_user_command("LBRandomQuestion", getRandomQuestion, opts)
+
   require("leetbuddy.functionalities")
 end
 
