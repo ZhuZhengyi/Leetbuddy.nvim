@@ -25,6 +25,7 @@ function M.split()
   vim.api.nvim_buf_set_option(results_buffer, "buftype", "nofile")
   vim.api.nvim_buf_set_option(results_buffer, "filetype", "Results")
 
+
   vim.api.nvim_buf_call(code_buffer, function()
     vim.cmd("botright vsplit " .. utils.get_current_buf_test_case())
   end)
@@ -36,6 +37,17 @@ function M.split()
   vim.api.nvim_buf_call(code_buffer, function()
     vim.cmd("vertical resize 100")
   end)
+
+  local buf_input_name = vim.api.nvim_buf_get_name(input_buffer)
+  local buf_results_name = vim.api.nvim_buf_get_name(results_buffer)
+  vim.api.nvim_create_autocmd({"BufEnter"}, {
+      pattern = {buf_input_name, buf_results_name},
+      command = "vertical resize 100",
+  })
+  vim.api.nvim_create_autocmd({"BufLeave"}, {
+      pattern = {buf_input_name, buf_results_name},
+      command = "vertical resize 20",
+  })
 
   vim.api.nvim_buf_call(results_buffer, function()
     vim.cmd("set nonumber")

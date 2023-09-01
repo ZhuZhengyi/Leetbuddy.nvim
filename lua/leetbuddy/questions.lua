@@ -128,33 +128,6 @@ local function gen_from_questions()
   end
 end
 
-local function pick_a_question(search_query)
-  local graphql_endpoint = config.graphql_endpoint
-
-  local variables = {
-    skip = M.skip,
-    limit = 20,
-    filters = {
-      difficulty = M.difficulty,
-      searchKeywords = search_query,
-      status = M.status,
-    },
-  }
-
-  local query = [[
-    query problemsetRandomFilteredQuestion($categorySlug: String!, $filters: QuestionListFilterInput) {
-          problemsetRandomFilteredQuestion(categorySlug: $categorySlug, filters: $filters)
-        }
-    ]]
-
-  local response =
-    curl.post(graphql_endpoint, { headers = headers, body = vim.json.encode({ query = query, variables = variables }) })
-
-  local data = vim.json.decode(response["body"])["data"]["problemsetRandomFilteredQuestion"]
-  return (data ~= vim.NIL and data["question"] or {})
-
-end
-
 local function select_problem(prompt_bufnr)
   actions.close(prompt_bufnr)
   local problem = action_state.get_selected_entry()
@@ -197,7 +170,6 @@ function M.questions()
       }),
       sorter = conf.generic_sorter(opts),
       attach_mappings = function(_, map)
-        map({ "n", "i" }, "<C-p>", pick_a_question)
         map({ "n", "i" }, "<CR>", select_problem)
         map({ "n", "i" }, "<A-r>", function()
           M.difficulty = nil
