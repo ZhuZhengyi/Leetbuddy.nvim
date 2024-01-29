@@ -10,23 +10,6 @@ local default_config = {
   code_dir = "solution",
   test_case_dir = "test_case",
   question_dir = "question",
-  code_tmpl_start = "//@lc code = start",
-  code_tmpl_end = "//@lc code = end",
-  code_template = [[
-/*
-# %d.%s
-
-%s
-*/
-
-use crate::solution::*;
-
-%s
-
-%s
-
-%s
-]],
 }
 
 return default_config

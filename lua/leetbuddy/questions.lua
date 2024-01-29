@@ -1,9 +1,7 @@
 local curl = require("plenary.curl")
-local sep = require("plenary.path").path.sep
 local config = require("leetbuddy.config")
 local headers = require("leetbuddy.headers")
-local utils = require("leetbuddy.utils")
-local split = require("leetbuddy.split")
+local reload = require("leetbuddy.reset")
 
 local M = {}
 
@@ -24,31 +22,39 @@ local function display_questions(search_query)
     },
   }
 
-  local query = [[
+  local query = config.domain == "cn" and [[
     query problemsetQuestionList($limit: Int, $skip: Int, $filters: QuestionListFilterInput) {
-  ]] .. (config.domain == "cn" and [[
       problemsetQuestionList(
-  ]] or [[
-      problemsetQuestionList: questionList(
-  ]]) .. [[
         categorySlug: ""
         skip: $skip
         limit: $limit
         filters: $filters
     ) {
-  ]] .. (config.domain == "cn" and [[
           total
           questions {
             paidOnly
             titleCn
             frontendQuestionId
-  ]] or [[
+            difficulty
+            isFavor
+            status
+            titleSlug
+        }
+      }
+    }
+  ]] or [[ 
+    query problemsetQuestionList($limit: Int, $skip: Int, $filters: QuestionListFilterInput) {
+      problemsetQuestionList: questionList(
+        categorySlug: ""
+        skip: $skip
+        limit: $limit
+        filters: $filters
+    ) {
           total: totalNum
           questions: data {
             paidOnly: isPaidOnly
             titleCn: title
             frontendQuestionId: questionFrontendId
-  ]]) .. [[
             difficulty
             isFavor
             status
@@ -131,25 +137,8 @@ end
 local function select_problem(prompt_bufnr)
   actions.close(prompt_bufnr)
   local problem = action_state.get_selected_entry()
-  local question_slug = string.format("%04d-%s", problem["value"]["frontendQuestionId"], problem["value"]["slug"])
 
-  local code_file_path = utils.get_code_file_path(question_slug, config.language)
-  local test_case_path = utils.get_test_case_path(question_slug)
-
-  if split.get_results_buffer() then
-    vim.api.nvim_command("LBClose")
-  end
-
-  if not utils.file_exists(code_file_path) then
-    vim.api.nvim_command(":silent !touch " .. code_file_path)
-    vim.api.nvim_command(":silent !touch " .. test_case_path)
-    vim.api.nvim_command("edit! " .. code_file_path)
-    vim.api.nvim_command("LBReset")
-  else
-    vim.api.nvim_command("edit! " .. code_file_path)
-  end
-  vim.api.nvim_command("LBSplit")
-  vim.api.nvim_command("LBQuestion")
+  reload.start_problem(problem["value"]["slug"])
 end
 
 local function filter_problems()

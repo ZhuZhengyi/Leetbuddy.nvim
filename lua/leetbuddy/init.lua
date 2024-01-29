@@ -5,7 +5,7 @@ M.user_config = require("leetbuddy.default_config")
 local function create_cmds()
   local questions = require("leetbuddy.questions").questions
   local question = require("leetbuddy.question").question
-  local reset = require("leetbuddy.reset").reset_question
+  local reset = require("leetbuddy.reset").reload_question
   local split = require("leetbuddy.split").split
   local close = require("leetbuddy.split").close_split
   local test = require("leetbuddy.runner").test

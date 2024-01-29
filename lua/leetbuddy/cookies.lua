@@ -2,6 +2,7 @@ local curl = require("plenary.curl")
 local config = require("leetbuddy.config")
 local path = require("plenary.path")
 local sep = require("plenary.path").path.sep
+local utils = require("leetbuddy.utils")
 local cookie_file = path:new(vim.loop.os_homedir() .. sep .. ".lbcookie")
 local vars = { "leetcode_session", "csrf_token" }
 local dir = path:new(config.directory)
@@ -72,8 +73,20 @@ function M.check_auth()
     }
   ]]
 
-  local response = curl.post(config.graphql_endpoint, { headers = headers, body = vim.json.encode({ query = query }) })
-  local user_status = vim.json.decode(response["body"])["data"]["userStatus"]
+  local response = curl.post(
+    config.graphql_endpoint,
+    {
+        headers = headers,
+        body = vim.json.encode({ query = query })
+    }
+  )
+
+  local ok, data = pcall(vim.json.decode, response["body"])
+  if not ok then
+      utils.Debug("cookies decode error: " .. response)
+      return
+  end
+  local user_status = data["data"]["userStatus"]
   status = user_status["isSignedIn"]
   username = user_status["username"]
   if not status then

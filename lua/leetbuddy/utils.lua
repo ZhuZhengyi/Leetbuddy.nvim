@@ -1,4 +1,5 @@
 local config = require("leetbuddy.config")
+local template = require("leetbuddy.template")
 local sep = require("plenary.path").path.sep
 
 M = {}
@@ -71,23 +72,27 @@ function M.is_in_folder(file, folder)
   return string.sub(file, 1, string.len(folder)) == folder
 end
 
-function M.get_current_buf_test_case()
-    local id_slug = M.get_current_buf_id_slug_name()
-    return M.get_test_case_path(id_slug)
+function M.get_cur_buf_test_case_path()
+    local file_name = M.get_cur_buf_file_name()
+    return M.get_test_case_path(file_name)
 end
 
-function M.get_current_buf_id_slug_name()
-  local file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":t")
-  return string.gsub(file,  "%.[^.]+$", "")
+function M.get_cur_buf_file_name()
+  return vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":t:r")
+  --return file_name
 end
 
-function M.get_current_buf_slug_name()
-  local file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":t")
-  return M.get_question_slug(file)
+function M.get_cur_buf_slug()
+  local file = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":t:r")
+  return M.get_slug_by_file(file)
 end
 
-function M.get_question_slug(file)
-  return string.gsub(string.gsub(file, "^%d+%-", ""), "%.[^.]+$", "")
+function M.get_slug_by_file(file)
+  return string.gsub(string.gsub(file, "^%d+%.", ""), "%.[^.]+$", "")
+end
+
+function M.get_file_name_by_slug(question_id, slug)
+    return string.format("%d.%s", question_id, slug)
 end
 
 function M.read_file_contents(path)
@@ -137,7 +142,7 @@ function M.strip_file_extension(file)
   return file:sub(1, lastDotIndex - 1)
 end
 
-function M.format_content(content)
+function M.tr_html_to_txt(content)
     local entities = {
         { "amp", "&" },
         { "apos", "'" },
@@ -169,22 +174,31 @@ function M.format_content(content)
     return content
 end
 
-function M.get_code_file_path(slug, ext)
+function M.get_code_file_path(file_name, ext)
   local code_dir_path = string.format("%s%s%s", config.directory, sep, config.code_dir)
   if not M.file_exists(code_dir_path) then
     vim.api.nvim_command(string.format(":silent !mkdir %s", code_dir_path))
   end
 
-  return string.format("%s%s%s.%s", code_dir_path, sep, slug , ext)
+  return string.format("%s%s%s.%s", code_dir_path, sep, file_name , ext)
 end
 
-function M.get_test_case_path(slug)
+function M.get_test_case_path(file_name)
   local test_case_dir_path = string.format("%s%s%s", config.directory, sep, config.test_case_dir)
   if not M.file_exists(test_case_dir_path) then
     vim.api.nvim_command(string.format(":silent !mkdir %s", test_case_dir_path))
   end
 
-  return string.format("%s%s%s.txt", test_case_dir_path , sep, slug)
+  return string.format("%s%s%s.txt", test_case_dir_path , sep, file_name)
+end
+
+function M.get_question_path(file_name)
+  local question_dir_path = string.format("%s%s%s", config.directory, sep, config.question_dir)
+  if not M.file_exists(question_dir_path) then
+    vim.api.nvim_command(string.format(":silent !mkdir %s", question_dir_path))
+  end
+
+  return string.format("%s%s%s.md", question_dir_path, sep, file_name)
 end
 
 function M.get_question_number_from_file_name(file_name)
@@ -230,9 +244,36 @@ function M.is_in_table(tab, val)
   return false
 end
 
+function M.encode_code_by_templ(question_data)
+    local code_template = template[question_data.lang]
+    if code_template == nil then
+        return question_data.code
+    end
+    return string.format(code_template.code,
+        question_data.question_id, question_data.title,
+        config.domain, question_data.slug,
+        question_data.question_id, question_data.lang,question_data.slug,
+        question_data.difficulty, question_data.ac_rate,
+        question_data.content,
+        question_data.test_case,
+        code_template.code_tmpl_start,
+        question_data.code,
+        code_template.code_tmpl_end
+    )
+end
+
+M.Debug = function(v)
+    if config.debug then
+        print(vim.inspect(v))
+    end
+    return v
+end
+
 M.P = function(v)
-  print(vim.inspect(v))
-  return v
+    if config.debug then
+        print(vim.inspect(v))
+    end
+    return v
 end
 
 return M

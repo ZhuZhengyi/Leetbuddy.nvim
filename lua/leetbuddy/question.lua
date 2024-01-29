@@ -9,7 +9,7 @@ local question_content, previous_question_slug, question_id
 
 local old_contents
 
-local function question_display(contents, oldqbufnr)
+local function display_question_content(contents, oldqbufnr)
   Qbufnr = oldqbufnr or vim.api.nvim_create_buf(true, true)
 
   local width = math.ceil(math.min(vim.o.columns, math.max(90, vim.o.columns - 20)))
@@ -53,12 +53,12 @@ local function question_display(contents, oldqbufnr)
   return Qbufnr
 end
 
-local function fetch_question(slug)
-    local question = M.fetch_question_data(slug)
-    if question == vim.NIL then
+local function encode_question_content(slug)
+    local question_data = M.fetch_question_data(slug)
+    if question_data == vim.NIL then
         return "You don't have a premium plan"
     end
-    return question["questionFrontendId"] .. ". " .. question["title"] .. "\n" .. question["content"]
+    return string.format("# %s.%s\r\n\r\n%s", question_data["questionFrontendId"], question_data["title"], question_data["content"])
 end
 
 function M.fetch_question_data(slug)
@@ -67,20 +67,33 @@ function M.fetch_question_data(slug)
     local variables = {
         titleSlug = slug,
     }
-
-    local query = [[
+    local query = config.domain == "cn" and [[
     query questionData($titleSlug: String!) {
         question(titleSlug: $titleSlug) {
             questionId
             questionFrontendId
+            difficulty
             sampleTestCase
-        ]] .. (config.domain == "cn" and [[
+            acRate
             title: translatedTitle
             content: translatedContent
-        ]] or [[
+            codeSnippets {
+                lang
+                langSlug
+                code
+            }
+        }
+    }
+    ]] or [[
+    query questionData($titleSlug: String!) {
+        question(titleSlug: $titleSlug) {
+            questionId
+            questionFrontendId
+            difficulty
+            sampleTestCase
+            acRate
             title
             content
-        ]]) .. [[
             codeSnippets {
                 lang
                 langSlug
@@ -94,34 +107,41 @@ function M.fetch_question_data(slug)
         config.graphql_endpoint,
         { headers = headers, body = vim.json.encode({ query = query, variables = variables }) }
     )
-
-    local question = vim.json.decode(response["body"])["data"]["question"]
-
-    question_id = question["questionId"]
-    if question["content"] == vim.NIL then
+    local ok, data = pcall(vim.json.decode, response["body"])
+    if not ok then
+        utils.Debug("cookies decode error: " .. response)
+        return
+    end
+    local question_data = data["data"]["question"]
+    question_id = question_data["questionId"]
+    if question_data["content"] == vim.NIL then
+        print(string.format("question[%s] is paidOnly", slug))
+        utils.Debug("fetch question data error, slug: ".. slug)
         return vim.NIL
     end
-    question["content"] = utils.format_content(question["content"])
+    question_data["content"] = utils.tr_html_to_txt(question_data["content"])
 
-    return question
+    return question_data
 end
 
 function M.question()
-  if utils.is_in_folder(vim.api.nvim_buf_get_name(0), config.directory) then
-    local question_slug = utils.get_current_buf_slug_name()
-    if previous_question_slug ~= question_slug then
-      question_content = utils.split_string_to_table(fetch_question(question_slug))
+    if not utils.is_in_folder(vim.api.nvim_buf_get_name(0), config.directory) then
+        utils.Debug("file not in leetbuddy base dir!")
+        return
     end
 
-    previous_question_slug = question_slug
-    question_display(question_content, Qbufnr)
-  end
+    local question_slug = utils.get_cur_buf_slug()
+    if previous_question_slug ~= question_slug then
+        question_content = utils.split_string_to_table(encode_question_content(question_slug))
+        previous_question_slug = question_slug
+    end
+
+    display_question_content(question_content, Qbufnr)
 end
 
-function M.get_question_id()
+function M.get_question_id(slug)
   if not question_id then
-    local question_slug = utils.get_current_buf_slug_name()
-    local _ = fetch_question(question_slug)
+    M.fetch_question_data(slug)
   end
   return question_id
 end
